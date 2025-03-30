@@ -27,10 +27,9 @@ const Usuario = mongoose.model('Usuario', {
 });
 
 const Puntaje = mongoose.model('Puntaje', {
-  username: String,
+  nombre: String,
   puntaje: Number,
-  tiempo: Number,
-  fecha: { type: Date, default: Date.now }
+  tiempo: Number
 });
 
 // Ruta base
@@ -71,26 +70,37 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Guardar nuevo puntaje
+// Guardar o actualizar puntaje (según si es el mayor)
 app.post('/api/puntajes', async (req, res) => {
   const { username, puntaje, tiempo } = req.body;
+
   try {
-    const nuevoPuntaje = new Puntaje({ username, puntaje, tiempo });
-    await nuevoPuntaje.save();
-    res.status(201).json(nuevoPuntaje);
-  } catch (err) {
-    res.status(500).json({ message: '❌ Error al guardar puntaje' });
+    const existente = await Puntaje.findOne({ nombre: username });
+
+    if (!existente) {
+      const nuevo = new Puntaje({ nombre: username, puntaje, tiempo });
+      await nuevo.save();
+      return res.status(201).json({ message: '✅ Puntaje guardado' });
+    }
+
+    if (puntaje > existente.puntaje) {
+      existente.puntaje = puntaje;
+      existente.tiempo = tiempo;
+      await existente.save();
+      return res.status(200).json({ message: '🔄 Puntaje actualizado (mejor resultado)' });
+    }
+
+    return res.status(200).json({ message: '📌 Puntaje no actualizado (ya existe uno mayor)' });
+  } catch (error) {
+    console.error("❌ Error al guardar puntaje:", error);
+    res.status(500).json({ message: '❌ Error del servidor al guardar puntaje' });
   }
 });
 
 // Obtener top 10 puntajes
 app.get('/api/puntajes/top10', async (req, res) => {
-  try {
-    const top = await Puntaje.find().sort({ puntaje: -1, tiempo: 1 }).limit(10);
-    res.json(top);
-  } catch (err) {
-    res.status(500).json({ message: '❌ Error al obtener ranking' });
-  }
+  const ranking = await Puntaje.find().sort({ puntaje: -1, tiempo: 1 }).limit(10);
+  res.json(ranking);
 });
 
 // Iniciar servidor
