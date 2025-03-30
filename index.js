@@ -20,7 +20,7 @@ mongoose.connect(process.env.MONGO_URI, {
   console.error('❌ Error al conectar a MongoDB:', err);
 });
 
-// Esquemas de Mongoose
+// Modelos
 const Usuario = mongoose.model('Usuario', {
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true }
@@ -29,7 +29,7 @@ const Usuario = mongoose.model('Usuario', {
 const Puntaje = mongoose.model('Puntaje', {
   nombre: String,
   puntaje: Number,
-  tiempo: Number
+  tiempo: String
 });
 
 // Ruta base
@@ -70,37 +70,32 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Guardar o actualizar puntaje (según si es el mayor)
-app.post('/api/puntajes', async (req, res) => {
-  const { username, puntaje, tiempo } = req.body;
-
-  try {
-    const existente = await Puntaje.findOne({ nombre: username });
-
-    if (!existente) {
-      const nuevo = new Puntaje({ nombre: username, puntaje, tiempo });
-      await nuevo.save();
-      return res.status(201).json({ message: '✅ Puntaje guardado' });
-    }
-
-    if (puntaje > existente.puntaje) {
-      existente.puntaje = puntaje;
-      existente.tiempo = tiempo;
-      await existente.save();
-      return res.status(200).json({ message: '🔄 Puntaje actualizado (mejor resultado)' });
-    }
-
-    return res.status(200).json({ message: '📌 Puntaje no actualizado (ya existe uno mayor)' });
-  } catch (error) {
-    console.error("❌ Error al guardar puntaje:", error);
-    res.status(500).json({ message: '❌ Error del servidor al guardar puntaje' });
-  }
+// Obtener top 10
+app.get('/api/puntajes', async (req, res) => {
+  const puntajes = await Puntaje.find().sort({ puntaje: -1 }).limit(10);
+  res.json(puntajes);
 });
 
-// Obtener top 10 puntajes
-app.get('/api/puntajes/top10', async (req, res) => {
-  const ranking = await Puntaje.find().sort({ puntaje: -1, tiempo: 1 }).limit(10);
-  res.json(ranking);
+// Guardar o actualizar puntaje si es más alto
+app.post('/api/puntajes', async (req, res) => {
+  const { nombre, puntaje, tiempo } = req.body;
+  try {
+    const existente = await Puntaje.findOne({ nombre });
+    if (existente) {
+      if (puntaje > existente.puntaje) {
+        existente.puntaje = puntaje;
+        existente.tiempo = tiempo;
+        await existente.save();
+      }
+      return res.json({ message: 'Puntaje actualizado o mantenido' });
+    } else {
+      const nuevo = new Puntaje({ nombre, puntaje, tiempo });
+      await nuevo.save();
+      return res.status(201).json({ message: 'Nuevo puntaje guardado' });
+    }
+  } catch (err) {
+    res.status(500).json({ message: 'Error al guardar el puntaje' });
+  }
 });
 
 // Iniciar servidor
