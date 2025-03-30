@@ -6,14 +6,9 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares
+// Middleware
 app.use(cors());
 app.use(express.json());
-
-// Ruta base para verificar si el servidor funciona
-app.get('/', (req, res) => {
-  res.send('Servidor funcionando correctamente 🚀');
-});
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGO_URI, {
@@ -25,13 +20,56 @@ mongoose.connect(process.env.MONGO_URI, {
   console.error('❌ Error al conectar a MongoDB:', err);
 });
 
-// Modelo de puntaje
+// Esquemas de Mongoose
+const Usuario = mongoose.model('Usuario', {
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true }
+});
+
 const Puntaje = mongoose.model('Puntaje', {
   nombre: String,
   puntaje: Number
 });
 
-// Rutas API
+// Ruta base
+app.get('/', (req, res) => {
+  res.send('Servidor funcionando correctamente 🚀');
+});
+
+// Registro
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const yaExiste = await Usuario.findOne({ username });
+    if (yaExiste) {
+      return res.status(400).json({ message: '❌ El usuario ya está registrado' });
+    }
+    const nuevo = new Usuario({ username, password });
+    await nuevo.save();
+    res.status(201).json({ message: '✅ Usuario registrado correctamente' });
+  } catch (err) {
+    res.status(500).json({ message: '❌ Error del servidor' });
+  }
+});
+
+// Login
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const usuario = await Usuario.findOne({ username });
+    if (!usuario) {
+      return res.status(400).json({ message: '❌ El usuario no existe' });
+    }
+    if (usuario.password !== password) {
+      return res.status(401).json({ message: '❌ Contraseña incorrecta' });
+    }
+    res.status(200).json({ message: '✔️ Login exitoso' });
+  } catch (err) {
+    res.status(500).json({ message: '❌ Error del servidor' });
+  }
+});
+
+// Ranking (puntajes)
 app.get('/api/puntajes', async (req, res) => {
   const puntajes = await Puntaje.find().sort({ puntaje: -1 }).limit(10);
   res.json(puntajes);
@@ -44,7 +82,7 @@ app.post('/api/puntajes', async (req, res) => {
   res.status(201).json(nuevoPuntaje);
 });
 
-// Iniciar el servidor
+// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
 });
